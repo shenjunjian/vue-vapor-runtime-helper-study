@@ -26,7 +26,8 @@ function toggle() {
   </h1>
 
   <h1>
-    <div>绑定文本值 {{ msg }}</div>
+    <div id="bind-text">绑定 文本 值 {{ msg }}</div>
+    <div id="bind-text">绑定 文本 值 {{ msg }}</div>
   </h1>
 
   <div>
@@ -46,7 +47,9 @@ function toggle() {
   <input type="text" v-model="inputValue" />
 
   <ul>
-    <li v-for="li in list" :data-id="li.id">无 key {{ li.name }}</li>
+    <li v-for="li in list" :data-id="li.id">
+      无 key {{ li.name }}<span>{{ li.name }}</span>
+    </li>
   </ul>
 
   <ul>
