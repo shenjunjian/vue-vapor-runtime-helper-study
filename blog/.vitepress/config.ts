@@ -31,4 +31,8 @@ export default defineConfig({
   },
 
   lastUpdated: true,
+  markdown: {
+    toc: { level: [2, 3, 4] },
+  },
+  base: "/vue-vapor-runtime-helper-study/",
 });

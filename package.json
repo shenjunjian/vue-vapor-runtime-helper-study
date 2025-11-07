@@ -12,6 +12,7 @@
     "blog:preview": "vitepress preview blog"
   },
   "dependencies": {
+    "oxc-minify": "^0.96.0",
     "vue": "^3.6.0-alpha.3"
   },
   "devDependencies": {
