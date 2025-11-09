@@ -5,11 +5,15 @@ import CodeRunner from '../components/codeRunner.vue'
 </script>
 <CodeRunner />
 
-## 模板与节点
-
 `Vapor` 编译模板的本质就是解析模板后生成一组指令性的微代码。这些微代码大多都是浏览器原生 API 的简单包装，涉及节点的创建与修改。
 
-### 创建节点
+在阅读源码时，我注意到以下问题：
+
+1. 在`runtime-vapor`包中， 有许多函数导出并使用，但并未在`vue`中进行导出，官方应该是只导出了 vapor 的编译产物中使用到的函数。
+2. 许多函数看似很纯粹，但实际运行时会访问到`instance、vapor runtime `中的一些变量或闭包变量, 从而不那么纯粹, 比如 `setAttr` 、`renderEffect`等等。这会造成：不能脱离框架而自由的使用这些函数。
+3. 基本所有的函数，都需要有处理`正常浏览器内的逻辑` 和处理 `hydrate SSG 水合的逻辑` 两种任务。有的是写成 2 个函数，有的是在同一个函数内走不同的代码分支。
+
+## 创建节点
 
 - `createElement` 通过`tagName`创建一个 element 元素。【未暴露】
 - `createTextNode` 创建一个文字 `node` 节点。
@@ -20,7 +24,7 @@ import CodeRunner from '../components/codeRunner.vue'
 <<< ./codes/1-create-node-src.ts [源码]
 :::
 
-### 模板函数创建节点
+## 模板函数创建节点
 
 - `template` 函数是返回一个模板函数，模板函数每次执行，快速的返回一个`全新的 DOM 或文字节点`。它内部是使用`node.cloneNode(true)` 来生成一个没有父节点，游离于文档之外的新 DOM。它的第 2 个参数为 true 时， 会指明生成的 dom 是某个窗口的根节点，具有 `$root=true` 的标记。
 
@@ -29,7 +33,7 @@ import CodeRunner from '../components/codeRunner.vue'
 <<< ./codes/2-template-src.ts [源码]
 :::
 
-### 节点的遍历与子节点
+## 节点的遍历与子节点
 
 - `child` 是返回`Dom`的第 1 个`子节点Dom`。
 - `nthChild` 是返回`Dom`的第 n 个`子节点Dom`。
@@ -39,45 +43,8 @@ import CodeRunner from '../components/codeRunner.vue'
 - `querySelector` 是通过选择器查询元素。【`vue`中未暴露】
 
 ::: code-group
-
-```javascript [例子]
-import { template, child, nthChild, next, txt } from "vue";
-const node = template(
-  "<h1><div>第一个节点</div><div>第二个节点</div>    <div>第四个节点</div><!--注释节点--></h1>"
-)();
-
-const n1 = child(node);
-const n2 = nthChild(node, 1);
-const n3 = nthChild(node, 2); // 空格为 text 类型的node
-const n4 = nthChild(node, 3);
-const comment = next(n4);
-const text = txt(n2);
-
-console.log({ node, n1, n2, n3, n4, comment, text });
-```
-
-```javascript [源码]
-function child(node: InsertionParent): Node {
-  return node.firstChild!
-}
-function nthChild(node: InsertionParent, i: number): Node {
-  return node.childNodes[i]
-}
-function next(node: Node): Node {
-  return node.nextSibling!
-}
-const txt = child // vapor 编译识别到元素第一个节点为text类型时，会编译为txt 函数，意义更明确！
-
-function parentNode(node: Node): ParentNode | null {
-  return node.parentNode
-}
-function querySelector(selectors: string): Element | null {
-  return document.querySelector(selectors)
-}
-```
-
-:::
-
+<<< ./codes/3-get-nodes-demo.ts [例子]
+<<< ./codes/3-get-nodes-src.ts [源码]
 ::: tip 浏览器中的 node
 
 1、通过例子可以看到，模板中的`空格和注释`分别是`text`和`comment` 类型的节点。通过观察`vapor` 模板编译，会发现它自动移除换行和空格，生成紧凑的 dom 节点。
@@ -85,9 +52,7 @@ function querySelector(selectors: string): Element | null {
 2、Dom 元素有两个属性访问子元素： `childNodes` 和 `children`。前者返回`node`类型，后者返回`element`,它们是有区别的！`空格和注释`不属于 `element`元素。
 :::
 
-## 绑定与修改节点
-
-### 修改节点
+## 修改节点
 
 - `setText` 修改 text node 的文字
 - `setHtml` 设置元素的 el.innerHtml
@@ -105,240 +70,35 @@ function querySelector(selectors: string): Element | null {
 :::
 
 ::: code-group
-
-```javascript [例子]
-import {
-  createTextNode,
-  template,
-  setText,
-  setHtml,
-  setClass,
-  setStyle,
-  setAttr,
-  setProp,
-  setDOMProp,
-  simpleSetCurrentInstance,
-} from "vue";
-simpleSetCurrentInstance({}); // 模拟代码运行在组件内，否则setAttr, setProp会报异常
-
-const textNode = createTextNode("hello world");
-setText(textNode, "why not create a new world?");
-
-const divElement = template("<div></div>", false)();
-divElement.className = ["echart-container"]; // 该类名会丢失
-divElement.style.position = "relative"; // 根据实测结果，style永远是 patch模式更新，所以该值可以保留
-
-setHtml(divElement, "<b>bold text</b>");
-setClass(divElement, ["red", { blue: true }]);
-setStyle(divElement, { background: "red" });
-setAttr(divElement, "title", "new world");
-setProp(divElement, "contenteditable", true);
-
-const rootElement = template("<div></div>", true)();
-rootElement.className = ["echart-container"];
-rootElement.style.position = "relative";
-
-setHtml(rootElement, "<b>bold text</b>");
-setClass(rootElement, ["red", { blue: true }]);
-setStyle(rootElement, { background: "red" });
-setAttr(rootElement, "title", "new world");
-setProp(rootElement, "contenteditable", true);
-
-console.log({ textNode, divElement, rootElement });
-console.log("观察发现： divElement不能保留住 class, 而 rootElement 是可以");
-```
-
-```javascript [源码]
-function setText(el: Text & { $txt?: string }, value: string): void {
-  if (el.$txt !== value) {
-    el.nodeValue = el.$txt = value;
-  }
-}
-
-function setHtml(el: TargetElement, value: any): void {
-  value = value == null ? "" : unsafeToTrustedHTML(value);
-  if (el.$html !== value) {
-    el.innerHTML = el.$html = value;
-  }
-}
-
-function setClass(el: TargetElement, value: any): void {
-  if (el.$root) {
-    // 增量式覆盖 className, 只添加或移除框架添加过的value, 保留第3方库添加的clas
-    setClassIncremental(el, value);
-  } else {
-    value = normalizeClass(value); // 将字符串，数组，对象形式的class值，统一为空格分隔的长字符串值
-
-    if (value !== el.$cls) {
-      // 直接覆盖 className
-      el.className = el.$cls = value;
-    }
-  }
-}
-
-function setStyle(el: TargetElement, value: any): void {
-  if (el.$root) {
-    // 增量式覆盖 style
-    setStyleIncremental(el, value);
-  } else {
-    // 将 字符串，数组，对象形式的style值，统一为对象形式的值
-    const normalizedValue = normalizeStyle(value);
-
-    patchStyle(el, el.$sty, (el.$sty = normalizedValue));
-  }
-}
-
-function setAttr(el: any, key: string, value: any): void {
-  // 有省略....
-
-  if (value !== el[`$${key}`]) {
-    el[`$${key}`] = value;
-    if (value != null) {
-      el.setAttribute(key, value);
-    } else {
-      el.removeAttribute(key);
-    }
-  }
-}
-
-function setProp(el: any, key: string, value: any): void {
-  if (key in el) {
-    setDOMProp(el, key, value);
-  } else {
-    setAttr(el, key, value);
-  }
-}
-
-function setDOMProp(el: any, key: string, value: any): void {
-  const prev = el[key];
-  if (value === prev) return;
-
-  let needRemove = false;
-  if (value === "" || value == null) {
-    const type = typeof prev;
-    if (type === "boolean") {
-      value = includeBooleanAttr(value);
-    } else if (value == null && type === "string") {
-      value = "";
-      needRemove = true;
-    } else if (type === "number") {
-      value = 0;
-      needRemove = true;
-    }
-  }
-
-  el[key] = value;
-
-  needRemove && el.removeAttribute(key);
-}
-```
-
+<<< ./codes/4-modify-node-demo.ts [例子]
+<<< ./codes/4-modify-node-src.ts [源码]
 :::
 
-### 响应更新
+## 响应更新节点
 
 - `renderEffect` 创建一个渲染副作用区域，底层依赖于 `@vue/reactivity` 包中的 `ReactiveEffect` 类。
 
 ::: code-group
+<<< ./codes/5-renderEffect-demo.ts [例子]
+<<< ./codes/5-renderEffect-src.ts [源码]
+:::
 
-```javascript [例子]
-import {
-  renderEffect,
-  ref,
-  template,
-  txt,
-  setText,
-  setClass,
-  nextTick,
-} from "vue";
+延伸阅读： v-model
 
-const divElement = template("<div> </div>")();
-const txtNode = txt(divElement);
+## v-if 的实现
 
-const text = ref("hello world");
-const isBlue = ref(false);
+- `createIf` : 创建一个 if 逻辑块, 它内部是使用委托给 `DynamicFragment` 类来实现响应。在 vapor 中，为了管理一种逻辑块(Block)，它使用 `VaporFragment` 抽象类来对应一个 `Block`, 通过源码` class DynamicFragment extends VaporFragment`可以看出， `DynamicFragment` 类就是一种动态块 (Block), 与 v-if 类似还有 v-for 和 slot, 都分别对应于某种 `VaporFragment`。
 
-// 创建副作用区域
-renderEffect(() => {
-  setText(txtNode, text.value);
-  setClass(divElement, ["red", { blue: isBlue.value }]);
-});
+::: code-group
+<<< ./codes/6-createIf-demo.ts [例子]
+<<< ./codes/6-createIf-src.ts [源码]
+:::
 
-// 1秒后修改响应数据
-setTimeout(() => {
-  text.value = "new world";
-  isBlue.value = true;
-  nextTick(() => {
-    console.log({ divElement, html: divElement.outerHTML });
-  });
-}, 1000);
-```
+## v-for
 
-```javascript [源码]
-// 基于 `ReactiveEffect` 编写一个带 Job 的 `RenderEffect`
-class RenderEffect extends ReactiveEffect {
-  i: VaporComponentInstance | null
-  job: SchedulerJob
-  updateJob: SchedulerJob
+- `createFor` : 创建一组 for 逻辑块。
 
-  constructor(public render: () => void) {
-    super()
-    const instance = currentInstance as VaporComponentInstance | null
-
-    const job: SchedulerJob = () => {
-      if (this.dirty) {
-        this.run()
-      }
-    }
-
-    this.updateJob = () => {
-      instance!.isUpdating = false
-      instance!.u && invokeArrayFns(instance!.u)
-    }
-
-    if (instance) {
-      job.i = instance
-    }
-
-    this.job = job
-    this.i = instance
-  }
-
-  fn(): void {
-    const instance = this.i
-    const scope = this.subs ? (this.subs.sub as EffectScope) : undefined
-    // renderEffect is always called after user has registered all hooks
-    const hasUpdateHooks = instance && (instance.bu || instance.u)
-
-    const prev = setCurrentInstance(instance, scope)
-    if (hasUpdateHooks && instance.isMounted && !instance.isUpdating) {
-      instance.isUpdating = true
-      instance.bu && invokeArrayFns(instance.bu)
-      this.render()
-      queuePostFlushCb(this.updateJob)
-    } else {
-      this.render()
-    }
-    setCurrentInstance(...prev)
-
-  }
-
-  notify(): void {
-    const flags = this.flags
-    if (!(flags & EffectFlags.PAUSED)) {
-      queueJob(this.job, this.i ? this.i.uid : undefined)
-    }
-  }
-}
-
-// 暴露函数
-function renderEffect(fn: () => void, noLifecycle = false): void {
-  const effect = new RenderEffect(fn);
-  if (noLifecycle) {
-    effect.fn = fn;
-  }
-  effect.run();
-}
-```
-
+::: code-group
+<<< ./codes/7-createFor-demo.ts [例子]
+<<< ./codes/7-createFor-src.ts [源码]
 :::

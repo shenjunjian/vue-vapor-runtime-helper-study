@@ -18,6 +18,8 @@ const list = ref([
 function toggle() {
   clsB.value = !clsB.value;
 }
+
+const show = ref(false);
 </script>
 
 <template>
@@ -47,6 +49,11 @@ function toggle() {
 
     <input type="text" v-model="inputValue" />
 
+    <div v-if="show">v-if的show</div>
+    <div v-else>v-if 的 hide</div>
+
+    <div v-show="show">v-show 的文字</div>
+
     <ul>
       <li v-for="li in list" :data-id="li.id">
         无 key {{ li.name }}<span>{{ li.name }}</span>
@@ -54,7 +61,9 @@ function toggle() {
     </ul>
 
     <ul>
-      <li v-for="li in list" :data-id="li.id">有 key{{ li.name }}</li>
+      <li v-for="li in list" :data-id="li.id" :key="li.id">
+        有 key{{ li.name }}
+      </li>
     </ul>
   </div>
 </template>
