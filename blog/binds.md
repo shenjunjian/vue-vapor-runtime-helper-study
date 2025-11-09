@@ -1,5 +1,10 @@
 # 模板与绑定
 
+<script setup>
+import CodeRunner from './components/codeRunner.vue'
+</script>
+<CodeRunner />
+
 ## 模板与节点
 
 `Vapor` 编译模板的本质就是解析模板后生成一组指令性的微代码。这些微代码大多都是浏览器原生 API 的简单包装，涉及节点的创建与修改。
@@ -131,9 +136,10 @@ function querySelector(selectors: string): Element | null {
 
 ## 绑定与修改节点
 
-### 绑定文本
+### 基础绑定
 
 - `setText` 修改 text node 的文字
+- `setHtml` 修改 text node 的文字
 - `setClass` 修改 节点的类名
 - `setStyle` 修改 节点的样式
 - `setAttr` 修改 节点的属性
@@ -152,15 +158,22 @@ function setText(el: Text & { $txt?: string }, value: string): void {
   }
 }
 
+function setHtml(el: TargetElement, value: any): void {
+  value = value == null ? "" : unsafeToTrustedHTML(value);
+  if (el.$html !== value) {
+    el.innerHTML = el.$html = value;
+  }
+}
+
 function setAttr(el: any, key: string, value: any): void {
   // 有省略....
 
   if (value !== el[`$${key}`]) {
-    el[`$${key}`] = value
+    el[`$${key}`] = value;
     if (value != null) {
-      el.setAttribute(key, value)
+      el.setAttribute(key, value);
     } else {
-      el.removeAttribute(key)
+      el.removeAttribute(key);
     }
   }
 }
@@ -168,36 +181,19 @@ function setAttr(el: any, key: string, value: any): void {
 function setProp(el: any, key: string, value: any): void {
   if (key in el) {
     // 设置 el[key]=value, 再检查value是否为： '', null, 某些特定假值。是则el.removeAttribute(key)
-    setDOMProp(el, key, value)
+    setDOMProp(el, key, value);
   } else {
-    setAttr(el, key, value)
-  }
-}
-
-// 增量式设置className
-function setClassIncremental(el: any, value: any): void {
-  const cacheKey = `$clsi`;
-  const normalizedValue = normalizeClass(value); // 将字符串，数组，对象形式的class值，统一为空格分隔的长字符串值
-
-  const prev = el[cacheKey];
-  if ((value = el[cacheKey] = normalizedValue) !== prev) {
-    const nextList = value.split(/\s+/);
-    if (value) {
-      el.classList.add(...nextList);
-    }
-    if (prev) {
-      for (const cls of prev.split(/\s+/)) {
-        if (!nextList.includes(cls)) el.classList.remove(cls);
-      }
-    }
+    setAttr(el, key, value);
   }
 }
 
 // 覆盖式设置className
 function setClass(el: TargetElement, value: any): void {
   if (el.$root) {
+    // 增量式覆盖 className, 只添加或移除框架添加过的value, 保留第3方库添加的clas
     setClassIncremental(el, value);
   } else {
+    // 将字符串，数组，对象形式的class值，统一为空格分隔的长字符串值
     value = normalizeClass(value);
 
     if (value !== el.$cls) {
@@ -206,28 +202,21 @@ function setClass(el: TargetElement, value: any): void {
   }
 }
 
-function setStyleIncremental(el: any, value: any): NormalizedStyle | undefined {
-  const cacheKey = `$styi`
-  const normalizedValue = isString(value)
-    ? parseStringStyle(value)
-    : (normalizeStyle(value) as NormalizedStyle | undefined)
-
-  patchStyle(el, el[cacheKey], (el[cacheKey] = normalizedValue))
-}
-
 function setStyle(el: TargetElement, value: any): void {
   if (el.$root) {
-    setStyleIncremental(el, value)
+    // 增量式覆盖 style
+    setStyleIncremental(el, value);
   } else {
-    const normalizedValue = normalizeStyle(value)
+    // 将 字符串，数组，对象形式的style值，统一为对象形式的值
+    const normalizedValue = normalizeStyle(value);
 
-    patchStyle(el, el.$sty, (el.$sty = normalizedValue))
+    patchStyle(el, el.$sty, (el.$sty = normalizedValue));
   }
 }
 ```
 
 :::
 
-### 绑定属性
+### 高级绑定
 
 ### 绑定指令
