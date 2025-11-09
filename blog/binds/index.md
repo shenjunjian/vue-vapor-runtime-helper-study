@@ -1,7 +1,7 @@
 # 模板与绑定
 
 <script setup>
-import CodeRunner from './components/codeRunner.vue'
+import CodeRunner from '../components/codeRunner.vue'
 </script>
 <CodeRunner />
 
@@ -16,84 +16,17 @@ import CodeRunner from './components/codeRunner.vue'
 - `createComment` 创建一个注释 `comment` 节点。【未暴露】
 
 ::: code-group
-
-```javascript [例子]
-import { createElement, createTextNode, createComment } from "vue";
-
-const element = createElement("div");
-const text = createTextNode("hello world");
-const comment = createComment("comment text");
-
-console.log({ element, text, comment });
-```
-
-```javascript [源码]
-function createElement(tagName: string): HTMLElement {
-  return document.createElement(tagName);
-}
-
-function createTextNode(value = ""): Text {
-  return document.createTextNode(value);
-}
-
-function createComment(data: string): Comment {
-  return document.createComment(data);
-}
-```
-
+<<< ./codes/1-create-node-demo.ts [例子]
+<<< ./codes/1-create-node-src.ts [源码]
 :::
 
 ### 模板函数创建节点
 
-- `template` 函数是返回一个模板函数，模板函数每次执行，快速的返回一个`全新的 DOM 或文字节点`！它内部是使用`node.cloneNode(true)` 来生成一个新 Dom，它没有父节点，游离于文档之外。它的第 2 个参数为 true 时， 会指明生成的 dom 是某个窗口的根节点，具有 `$root=true` 的标记。
+- `template` 函数是返回一个模板函数，模板函数每次执行，快速的返回一个`全新的 DOM 或文字节点`。它内部是使用`node.cloneNode(true)` 来生成一个没有父节点，游离于文档之外的新 DOM。它的第 2 个参数为 true 时， 会指明生成的 dom 是某个窗口的根节点，具有 `$root=true` 的标记。
 
 ::: code-group
-
-```javascript [例子]
-import { template } from "vue";
-const staticTemplate = template("<h1><div>纯静态节点</div></h1>");
-const staticDom = staticTemplate();
-console.log({ staticTemplate, staticDom });
-
-const textTemplate = template("纯文字");
-const textDom = textTemplate();
-console.log({ textTemplate, textDom });
-
-const rootTemplate = template("<div></div>", true);
-const rootDom = rootTemplate();
-console.log("观察 rootDom.$root", { rootDom });
-```
-
-```javascript [源码]
-import { _child, createElement, createTextNode } from './node'
-
-let t: HTMLTemplateElement
-
-// 返回一个快速吐出一个dom的函数。
-function template(html: string, root?: boolean) {
-  let node: Node
-
-  return (): Node & { $root?: true } => {
-    // 1、支持文本
-    if (html[0] !== '<') {
-      return createTextNode(html)
-    }
-
-    // 2、使用<template>克隆全新的 DOM
-    if (!node) {
-      t = t || createElement('template')
-      t.innerHTML = html
-      node = _child(t.content)
-    }
-    const ret = node.cloneNode(true)
-
-    if (root) (ret as any).$root = true
-    return ret
-  }
-}
-
-```
-
+<<< ./codes/2-template-demo.ts [例子]
+<<< ./codes/2-template-src.ts [源码]
 :::
 
 ### 节点的遍历与子节点
@@ -154,7 +87,7 @@ function querySelector(selectors: string): Element | null {
 
 ## 绑定与修改节点
 
-### 基础绑定
+### 修改节点
 
 - `setText` 修改 text node 的文字
 - `setHtml` 设置元素的 el.innerHtml
@@ -190,6 +123,7 @@ simpleSetCurrentInstance({}); // 模拟代码运行在组件内，否则setAttr,
 
 const textNode = createTextNode("hello world");
 setText(textNode, "why not create a new world?");
+
 const divElement = template("<div></div>", false)();
 divElement.className = ["echart-container"]; // 该类名会丢失
 divElement.style.position = "relative"; // 根据实测结果，style永远是 patch模式更新，所以该值可以保留
@@ -301,6 +235,110 @@ function setDOMProp(el: any, key: string, value: any): void {
 
 :::
 
-### 高级绑定
+### 响应更新
 
-### 绑定指令
+- `renderEffect` 创建一个渲染副作用区域，底层依赖于 `@vue/reactivity` 包中的 `ReactiveEffect` 类。
+
+::: code-group
+
+```javascript [例子]
+import {
+  renderEffect,
+  ref,
+  template,
+  txt,
+  setText,
+  setClass,
+  nextTick,
+} from "vue";
+
+const divElement = template("<div> </div>")();
+const txtNode = txt(divElement);
+
+const text = ref("hello world");
+const isBlue = ref(false);
+
+// 创建副作用区域
+renderEffect(() => {
+  setText(txtNode, text.value);
+  setClass(divElement, ["red", { blue: isBlue.value }]);
+});
+
+// 1秒后修改响应数据
+setTimeout(() => {
+  text.value = "new world";
+  isBlue.value = true;
+  nextTick(() => {
+    console.log({ divElement, html: divElement.outerHTML });
+  });
+}, 1000);
+```
+
+```javascript [源码]
+// 基于 `ReactiveEffect` 编写一个带 Job 的 `RenderEffect`
+class RenderEffect extends ReactiveEffect {
+  i: VaporComponentInstance | null
+  job: SchedulerJob
+  updateJob: SchedulerJob
+
+  constructor(public render: () => void) {
+    super()
+    const instance = currentInstance as VaporComponentInstance | null
+
+    const job: SchedulerJob = () => {
+      if (this.dirty) {
+        this.run()
+      }
+    }
+
+    this.updateJob = () => {
+      instance!.isUpdating = false
+      instance!.u && invokeArrayFns(instance!.u)
+    }
+
+    if (instance) {
+      job.i = instance
+    }
+
+    this.job = job
+    this.i = instance
+  }
+
+  fn(): void {
+    const instance = this.i
+    const scope = this.subs ? (this.subs.sub as EffectScope) : undefined
+    // renderEffect is always called after user has registered all hooks
+    const hasUpdateHooks = instance && (instance.bu || instance.u)
+
+    const prev = setCurrentInstance(instance, scope)
+    if (hasUpdateHooks && instance.isMounted && !instance.isUpdating) {
+      instance.isUpdating = true
+      instance.bu && invokeArrayFns(instance.bu)
+      this.render()
+      queuePostFlushCb(this.updateJob)
+    } else {
+      this.render()
+    }
+    setCurrentInstance(...prev)
+
+  }
+
+  notify(): void {
+    const flags = this.flags
+    if (!(flags & EffectFlags.PAUSED)) {
+      queueJob(this.job, this.i ? this.i.uid : undefined)
+    }
+  }
+}
+
+// 暴露函数
+function renderEffect(fn: () => void, noLifecycle = false): void {
+  const effect = new RenderEffect(fn);
+  if (noLifecycle) {
+    effect.fn = fn;
+  }
+  effect.run();
+}
+```
+
+:::

@@ -15,7 +15,7 @@ export default defineConfig({
       {
         text: "模板编译",
         items: [
-          { text: "模板绑定", link: "/binds" },
+          { text: "模板绑定", link: "/binds/" },
           { text: "事件绑定", link: "/events" },
           { text: "组件", link: "/components" },
         ],
