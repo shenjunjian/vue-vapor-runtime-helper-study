@@ -1,5 +1,5 @@
 <script setup lang="ts" vapor>
-import HelloWorld from "./components/HelloWorld.vue";
+import Base from "./components/Base.vue";
 
 import { template, child, nthChild, next, txt } from "vue";
 const node = template(
@@ -16,7 +16,7 @@ console.log({ node, n1, n2, n3, n4, comment });
 </script>
 
 <template>
-  <HelloWorld msg="Vite + Vue" />
+  <Base msg="Vite + Vue" />
 </template>
 
 <style scoped></style>
