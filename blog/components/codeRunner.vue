@@ -45,5 +45,7 @@ onMounted(() => {
   position: fixed;
   top: 80px;
   right: 20px;
+
+  border: 1px solid #ccc;
 }
 </style>
