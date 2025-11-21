@@ -13,7 +13,7 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: "模板编译",
+        text: "Vapor 运行时函数",
         items: [
           { text: "模板绑定", link: "/binds/" },
           { text: "事件绑定", link: "/events" },

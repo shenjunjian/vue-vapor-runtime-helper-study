@@ -10,7 +10,7 @@ delegateEvents("click"); // 绑定全局的回调
 btn1.$evtclick = () => console.log("单事件回调");
 
 // 多个事件绑定
-// 1、直接绑定一个数组是可行的
+// 1、直接绑定一个数组是可行的， 但vapor编译系统不这样操作。
 // dom2.$evtclick = [
 //   () => console.log("多事件回调1"),
 //   () => console.log("多事件回调2"),
